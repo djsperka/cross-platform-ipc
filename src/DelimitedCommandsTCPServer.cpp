@@ -139,13 +139,12 @@ void threadFunc(boost::asio::io_context* context)
 	context->run();
 }
 
-DelimitedCommandsTCPServer::DelimitedCommandsTCPServer(const std::string& addr, int port, char delimiter, const std::string& quitPrefix)
-: m_addr(addr)
-, m_port(port)
+DelimitedCommandsTCPServer::DelimitedCommandsTCPServer(int port, char delimiter, CallbackFunc f)
+: m_port(port)
 , m_delim(delimiter)
-, m_quitPrefix(quitPrefix)
+, m_callback(f)
 {
-	tcp_server server(m_io_context);
+	tcp_server server();
 	m_thread = std::thread(threadFunc, &m_io_context);
 }
 

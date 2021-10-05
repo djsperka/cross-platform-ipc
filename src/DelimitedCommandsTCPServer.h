@@ -10,6 +10,8 @@
 
 #include <string>
 #include <boost/asio.hpp>
+#include <boost/bind.hpp>
+#include <boost/function.hpp>
 #include <thread>
 
 
@@ -21,8 +23,12 @@ class DelimitedCommandsTCPServer {
 	boost::asio::io_context m_io_context;
 	std::thread m_thread;
 
+
+	typedef boost::function<bool(const std::string &)> CallbackFunc;
+	CallbackFunc m_callback;
+
 public:
-	DelimitedCommandsTCPServer(const std::string& addr, int port, char delimiter=';', const std::string& quitPrefix = std::string("quit"));
+	DelimitedCommandsTCPServer(int port, char delimiter=';', CallbackFunc f);
 	virtual ~DelimitedCommandsTCPServer();
 	void stop();
 };

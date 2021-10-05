@@ -1,163 +1,200 @@
-
 //
-// server.cpp
-// ~~~~~~~~~~
+// async_tcp_echo_server.cpp
+// ~~~~~~~~~~~~~~~~~~~~~~~~~
 //
-// Copyright (c) 2003-2021 Christopher M. Kohlhoff (chris at kohlhoff dot com)
+// Copyright (c) 2003-2019 Christopher M. Kohlhoff (chris at kohlhoff dot com)
 //
 // Distributed under the Boost Software License, Version 1.0. (See accompanying
 // file LICENSE_1_0.txt or copy at http://www.boost.org/LICENSE_1_0.txt)
 //
 
-
+#include <cstdlib>
 #include <iostream>
+#include <memory>
+#include <utility>
+#include <thread>
 #include <string>
-#include "DelimitedCommandsTCPServer.h"
-
-#if 0
-
-#include <boost/bind/bind.hpp>
-#include <boost/shared_ptr.hpp>
-#include <boost/enable_shared_from_this.hpp>
 #include <boost/asio.hpp>
+#include <boost/bind.hpp>
 
 using boost::asio::ip::tcp;
 
-class tcp_connection
-    : public boost::enable_shared_from_this<tcp_connection>
+class session
+  : public std::enable_shared_from_this<session>
 {
 public:
-    typedef boost::shared_ptr<tcp_connection> pointer;
+	session(tcp::socket socket, std::function<bool(const std::string&)> f)
+	: socket_(std::move(socket))
+	, f_(f)
+	{
+	}
 
-    static pointer create(boost::asio::io_context& io_context)
-    {
-        return pointer(new tcp_connection(io_context));
-    }
-
-    tcp::socket& socket()
-    {
-        return socket_;
-    }
-
-    void start()
-    {
-        std::cout << "Got connection, wait for command...." << std::endl;
-
-        // Rather than write here, we start an async_read -- that's for waiting on client to send a command
-        boost::asio::async_read_until(socket_, buf_, ';',
-            boost::bind(&tcp_connection::handle_read, shared_from_this(), 
-                boost::asio::placeholders::error,
-                boost::asio::placeholders::bytes_transferred));
-    }
+	void start()
+	{
+		do_read();
+	}
 
 private:
-    tcp_connection(boost::asio::io_context& io_context)
-    : context_(io_context)
-    , socket_(io_context)
-    {
-    }
-
-    void handle_write(const boost::system::error_code& /*error*/,
-        size_t /*bytes_transferred*/)
-    {
-        // Rather than write here, we start an async_read -- that's for waiting on client to send a command
-        boost::asio::async_read_until(socket_, buf_, ';',
-            boost::bind(&tcp_connection::handle_read, shared_from_this(),
-                boost::asio::placeholders::error,
-                boost::asio::placeholders::bytes_transferred));
-    }
-
-    void handle_read(const boost::system::error_code& /*error*/,
-        size_t nbytes/*bytes_transferred*/)
-    {
-        std::cout << "Got command, length " << nbytes << std::endl;
-        if (nbytes > 0)
-        {
-            std::ostringstream oss;
-            oss << &buf_;
-            std::string s = oss.str();
-
-            std::cout << "oss method: " << s << std::endl;
-			if (s.find("quit") == 0)
+	void do_read()
+	{
+		auto self(shared_from_this());
+		socket_.async_read_some(boost::asio::buffer(data_, max_length),
+			[this, self](boost::system::error_code ec, std::size_t length)
 			{
-				std::cout << "Quitting." << std::endl;
-				socket_.close();
-				context_.stop();
-			}
-			else
+				// handle command
+				f_(std::string(data_, length));
+				// send reponse
+				if (!ec)
+				{
+					do_write(length);
+				}
+			});
+	}
+
+	void do_write(std::size_t length)
+	{
+		auto self(shared_from_this());
+		boost::asio::async_write(socket_, boost::asio::buffer(data_, length),
+			[this, self](boost::system::error_code ec, std::size_t /*length*/)
 			{
-				std::cout << "Executing command." << std::endl;
-				message_ = "got command.";
+				if (!ec)
+				{
+					do_read();
+				}
+			});
+	}
 
-
-				// send response, and wait for another command.
-				boost::asio::async_write(socket_, boost::asio::buffer(message_),
-					boost::bind(&tcp_connection::handle_write, shared_from_this(),
-						boost::asio::placeholders::error,
-						boost::asio::placeholders::bytes_transferred));
-			}
-        }
-    }
-
-    boost::asio::io_context& context_;
-    tcp::socket socket_;
-    std::string message_;
-    boost::asio::streambuf buf_;
+	tcp::socket socket_;
+	enum { max_length = 1024 };
+	char data_[max_length];
+	std::function<bool(const std::string&)> f_;
 };
 
-class tcp_server
+class server
 {
 public:
-    tcp_server(boost::asio::io_context& io_context)
-        : io_context_(io_context),
-        acceptor_(io_context, tcp::endpoint(tcp::v4(), 7002))
-    {
-        start_accept();
-    }
+	server(boost::asio::io_context& io_context, short port, std::function<bool(const std::string&)> f)
+	: acceptor_(io_context, tcp::endpoint(tcp::v4(), port))
+	{
+		do_accept(f);
+	}
 
 private:
-    void start_accept()
-    {
-        tcp_connection::pointer new_connection =
-            tcp_connection::create(io_context_);
+	void do_accept(std::function<bool(const std::string&)> f)
+	{
+		acceptor_.async_accept(
+			[this, f](boost::system::error_code ec, tcp::socket socket)
+			{
+			  if (!ec)
+			  {
+				  std::cout << "accepted connection" << std::endl;
+				  std::make_shared<session>(std::move(socket), f)->start();
+			  }
 
-        acceptor_.async_accept(new_connection->socket(),
-            boost::bind(&tcp_server::handle_accept, this, new_connection,
-                boost::asio::placeholders::error));
-    }
+			  do_accept(f);
+			});
+	}
 
-    void handle_accept(tcp_connection::pointer new_connection,
-        const boost::system::error_code& error)
-    {
-        if (!error)
-        {
-            new_connection->start();
-        }
-
-        start_accept();
-    }
-
-    boost::asio::io_context& io_context_;
-    tcp::acceptor acceptor_;
+	tcp::acceptor acceptor_;
 };
 
-#endif
 
-int main()
+class TCPServerWrapper
 {
-	DelimitedCommandsTCPServer server("127.0.0.1", 7001, ';', "quit");
+	boost::asio::io_context io_context_;
+	std::function<bool(const std::string&)> f_;
+	int port_;
+	std::thread t_;
+public:
+	TCPServerWrapper(std::function<bool(const std::string&)> f, int port)
+	: f_(f)
+	,  port_(port)
+	{}
+	void start()
+	{
+		t_ = std::thread(&TCPServerWrapper::threadFunc, this);
+		t_.join();
+	}
+	virtual ~TCPServerWrapper()
+	{
+		io_context_.stop();
+	}
+	void threadFunc()
+	{
+		server s(io_context_, port_, f_);
+		std::cout << "threadFunc: run io_context" << std::endl;
+		io_context_.run();
+		std::cout << "threadFunc done." << std::endl;
+	}
+	void stop()
+	{
+		std::cout << "stop(): stop io_context" << std::endl;
+		io_context_.stop();
+		std::cout << "stop(): done." << std::endl;
+	}
 
-#if 0
-    try
-    {
-        boost::asio::io_context io_context;
-        tcp_server server(io_context);
-        io_context.run();
-    }
-    catch (std::exception& e)
-    {
-        std::cerr << e.what() << std::endl;
-    }
-#endif
-    return 0;
+};
+
+
+
+//boost::asio::io_context io_context;
+
+std::unique_ptr<TCPServerWrapper> pWrapper;
+
+bool callback(const std::string& s)
+{
+	std::cout << "callback: " << s << std::endl;
+	if (s.find("quit") != std::string::npos)
+	{
+		std::cout << "quit" << std::endl;
+		pWrapper->stop();
+	}
+	return true;
+}
+
+void run_stim()
+{
+	boost::asio::io_context io_context;
+	pWrapper = std::unique_ptr<TCPServerWrapper>(new TCPServerWrapper(boost::bind(callback, _1), 7001));
+
+	// blocking
+	pWrapper->start();
+}
+
+//void threadFunc()
+//{
+//	server s(io_context, 7001, boost::bind(callback, _1));
+//	io_context.run();
+//}
+
+int main(int argc, char* argv[])
+{
+
+	std::cout << "main(): call run_stim" << std::endl;
+	run_stim();
+	std::cout << "main(): run_stim done" << std::endl;
+
+//	std::thread t(threadFunc);
+//	t.join();
+//	std::cout << "joined" << std::endl;
+//	try
+//	{
+////    if (argc != 2)
+////    {
+////      std::cerr << "Usage: async_tcp_echo_server <port>\n";
+////      return 1;
+////    }
+//
+//		boost::asio::io_context io_context;
+//
+//		server s(io_context, 7001, boost::bind(callback, _1));
+//
+//		io_context.run();
+//	}
+//	catch (std::exception& e)
+//	{
+//	std::cerr << "Exception: " << e.what() << "\n";
+//	}
+
+	return 0;
 }
