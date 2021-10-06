@@ -29,8 +29,9 @@
 #include <thread>
 #include <string>
 #include <boost/asio.hpp>
-#include <boost/bind.hpp>
+#include <boost/bind/bind.hpp>
 
+using namespace boost::placeholders;
 using boost::asio::ip::tcp;
 
 namespace tcpsw {
