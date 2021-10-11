@@ -134,7 +134,7 @@ private:
 };
 
 
-class TCPServerWrapper
+class AsyncTCPServerWrapper
 {
 	boost::asio::io_context io_context_;
 	std::function<bool(const std::string&, std::ostream&)> f_;
@@ -142,17 +142,17 @@ class TCPServerWrapper
 	char delim_;
 	std::thread t_;
 public:
-	TCPServerWrapper(std::function<bool(const std::string&, std::ostream&)> f, int port, char delim = ';')
+	AsyncTCPServerWrapper(std::function<bool(const std::string&, std::ostream&)> f, int port, char delim = ';')
 	: f_(f)
 	, port_(port)
 	, delim_(delim)
 	{}
 	void start()
 	{
-		t_ = std::thread(&TCPServerWrapper::threadFunc, this);
+		t_ = std::thread(&AsyncTCPServerWrapper::threadFunc, this);
 		t_.join();
 	}
-	virtual ~TCPServerWrapper()
+	virtual ~AsyncTCPServerWrapper()
 	{
 		io_context_.stop();
 	}
@@ -173,10 +173,13 @@ public:
 };
 #endif
 
-#include "TCPServerWrapper.h"
+#include "AsyncTCPServerWrapper.h"
+#include "UDPServerWrapper.h"
+#include "BlockingTCPClientSend.h"
 #include <iostream>
 #include <memory>
-std::unique_ptr<TCPServerWrapper> pWrapper;
+std::unique_ptr<AsyncTCPServerWrapper> pWrapper;
+std::unique_ptr<UDPServerWrapper> pUDPWrapper;
 
 bool callback(const std::string& s, std::ostream& out)
 {
@@ -186,46 +189,42 @@ bool callback(const std::string& s, std::ostream& out)
 		std::cout << "quit" << std::endl;
 		pWrapper->stop();
 	}
-	out << "OK";
+	out << "OK;";
 	return true;
 }
 
-void run_stim()
+void run_stim(char delim)
 {
-	pWrapper = std::unique_ptr<TCPServerWrapper>(new TCPServerWrapper(boost::bind(callback, _1, _2), 7001, ';'));
+	pWrapper = std::unique_ptr<AsyncTCPServerWrapper>(new AsyncTCPServerWrapper(boost::bind(callback, _1, _2), 7001, delim));
 
-	// blocking
+	// blocking, but with async callbacks
 	pWrapper->start();
+}
+
+
+void run_stim_udp()
+{
+	pUDPWrapper = std::unique_ptr<UDPServerWrapper>(new UDPServerWrapper(7002));
+	pUDPWrapper->start();
+
 }
 
 int main(int argc, char* argv[])
 {
+	if (argc == 5 && std::string(argv[1])==std::string("cli"))
+	{
+		std::string reply = BlockingTCPClientSend(std::string(argv[2]), std::string(argv[3]), std::string(argv[4]));
+		std::cout << "Got reply: " << reply << std::endl;
+	}
+	else if (std::string(argv[1]) == std::string("srv"))
+	{
+		char delim = ';';
+		if (argc > 2 && std::string(argv[2]) == std::string("eof"))
+			delim = 0x5;
+		std::cout << "main(): call run_stim" << std::endl;
+		run_stim(delim);
+		std::cout << "main(): run_stim done" << std::endl;
 
-	std::cout << "main(): call run_stim" << std::endl;
-	run_stim();
-	std::cout << "main(): run_stim done" << std::endl;
-
-//	std::thread t(threadFunc);
-//	t.join();
-//	std::cout << "joined" << std::endl;
-//	try
-//	{
-////    if (argc != 2)
-////    {
-////      std::cerr << "Usage: async_tcp_echo_server <port>\n";
-////      return 1;
-////    }
-//
-//		boost::asio::io_context io_context;
-//
-//		server s(io_context, 7001, boost::bind(callback, _1));
-//
-//		io_context.run();
-//	}
-//	catch (std::exception& e)
-//	{
-//	std::cerr << "Exception: " << e.what() << "\n";
-//	}
-
+	}
 	return 0;
 }

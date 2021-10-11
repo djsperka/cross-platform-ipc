@@ -5,8 +5,8 @@
  *      Author: dan
  */
 
-#ifndef TCPSERVERWRAPPER_H_
-#define TCPSERVERWRAPPER_H_
+#ifndef ASYNCTCPSERVERWRAPPER_H_
+#define ASYNCTCPSERVERWRAPPER_H_
 
 
 
@@ -50,7 +50,7 @@ namespace tcpsw {
 		void start()
 		{
 			std::ostream output(&write_buffer_);
-			output << "HELLO";
+			output << "HELLO;";
 			do_write();
 		}
 
@@ -63,6 +63,16 @@ namespace tcpsw {
 			boost::asio::async_read_until(socket_, read_buffer_, delim_,
 				[this, self](boost::system::error_code ec, std::size_t length)
 				{
+
+					if (ec)
+					{
+						if (ec == boost::asio::error::eof)
+							std::cout << "remote client closed connection" << std::endl;
+						else
+							std::cout << "error during async_read_until" << std::endl;
+						return;
+					}
+
 					// reading from the read buffer (via getline()) consumes characters from the buffer (i.e. removes char from it).
 					// The delimiter is consumed by getline(), but it is not included in 'line'.
 					std::istream input(&read_buffer_);
@@ -86,11 +96,7 @@ namespace tcpsw {
 						f_(line, output);
 					}
 
-					// send response(s)
-					if (!ec)
-					{
-						do_write();
-					}
+					do_write();
 				});
 		}
 
@@ -103,6 +109,7 @@ namespace tcpsw {
 				boost::asio::async_write(socket_, write_buffer_.data(),
 					[this, self](boost::system::error_code ec, std::size_t length)
 					{
+						std::cout << "wrote reply" << std::endl;
 						if (!ec)
 						{
 							write_buffer_.consume(length);
@@ -117,8 +124,6 @@ namespace tcpsw {
 		}
 
 		tcp::socket socket_;
-		enum { max_length = 1024 };
-		char data_[max_length];
 		std::function<bool(const std::string&, std::ostream&)> f_;
 		char delim_;
 		boost::asio::streambuf read_buffer_;
@@ -155,7 +160,7 @@ namespace tcpsw {
 	};
 };
 
-class TCPServerWrapper
+class AsyncTCPServerWrapper
 {
 	boost::asio::io_context io_context_;
 	std::function<bool(const std::string&, std::ostream&)> f_;
@@ -163,17 +168,17 @@ class TCPServerWrapper
 	char delim_;
 	std::thread t_;
 public:
-	TCPServerWrapper(std::function<bool(const std::string&, std::ostream&)> f, int port, char delim = ';')
+	AsyncTCPServerWrapper(std::function<bool(const std::string&, std::ostream&)> f, int port, char delim = ';')
 	: f_(f)
 	, port_(port)
 	, delim_(delim)
 	{}
 	void start()
 	{
-		t_ = std::thread(&TCPServerWrapper::threadFunc, this);
+		t_ = std::thread(&AsyncTCPServerWrapper::threadFunc, this);
 		t_.join();
 	}
-	virtual ~TCPServerWrapper()
+	virtual ~AsyncTCPServerWrapper()
 	{
 		io_context_.stop();
 	}
@@ -194,4 +199,4 @@ public:
 
 
 
-#endif /* TCPSERVERWRAPPER_H_ */
+#endif /* ASYNCTCPSERVERWRAPPER_H_ */
