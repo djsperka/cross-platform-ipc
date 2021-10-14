@@ -29,10 +29,7 @@
 #include <thread>
 #include <string>
 #include <boost/asio.hpp>
-#include <boost/bind/bind.hpp>
-
-using namespace boost::placeholders;
-using boost::asio::ip::tcp;
+namespace boostip = boost::asio::ip;
 
 namespace tcpsw {
 
@@ -40,7 +37,7 @@ namespace tcpsw {
 	  : public std::enable_shared_from_this<session>
 	{
 	public:
-		session(tcp::socket socket, std::function<bool(const std::string&, std::ostream&)> f, char delim)
+		session(boostip::tcp::socket socket, std::function<bool(const std::string&, std::ostream&)> f, char delim)
 		: socket_(std::move(socket))
 		, f_(f)
 		, delim_(delim)
@@ -123,7 +120,7 @@ namespace tcpsw {
 			}
 		}
 
-		tcp::socket socket_;
+		boostip::tcp::socket socket_;
 		std::function<bool(const std::string&, std::ostream&)> f_;
 		char delim_;
 		boost::asio::streambuf read_buffer_;
@@ -135,7 +132,7 @@ namespace tcpsw {
 	{
 	public:
 		server(boost::asio::io_context& io_context, short port, std::function<bool(const std::string&, std::ostream&)> f, char delim)
-		: acceptor_(io_context, tcp::endpoint(tcp::v4(), port))
+		: acceptor_(io_context, boostip::tcp::endpoint(boostip::tcp::v4(), port))
 		{
 			do_accept(f, delim);
 		}
@@ -144,7 +141,7 @@ namespace tcpsw {
 		void do_accept(std::function<bool(const std::string&, std::ostream&)> f, char delim)
 		{
 			acceptor_.async_accept(
-				[this, f, delim](boost::system::error_code ec, tcp::socket socket)
+				[this, f, delim](boost::system::error_code ec, boostip::tcp::socket socket)
 				{
 				  if (!ec)
 				  {
@@ -156,7 +153,7 @@ namespace tcpsw {
 				});
 		}
 
-		tcp::acceptor acceptor_;
+		boostip::tcp::acceptor acceptor_;
 	};
 };
 
