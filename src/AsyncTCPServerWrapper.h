@@ -106,7 +106,6 @@ namespace tcpsw {
 				boost::asio::async_write(socket_, write_buffer_.data(),
 					[this, self](boost::system::error_code ec, std::size_t length)
 					{
-						std::cout << "wrote reply" << std::endl;
 						if (!ec)
 						{
 							write_buffer_.consume(length);
