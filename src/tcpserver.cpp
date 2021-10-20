@@ -178,6 +178,9 @@ public:
 #include "BlockingTCPClientSend.h"
 #include <iostream>
 #include <memory>
+#include <boost/bind/bind.hpp>
+using namespace boost::placeholders;
+
 std::unique_ptr<AsyncTCPServerWrapper> pWrapper;
 std::unique_ptr<UDPServerWrapper> pUDPWrapper;
 

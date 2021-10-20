@@ -12,6 +12,7 @@
 #include <fstream>
 #include <iostream>
 #include <boost/asio.hpp>
+namespace boostip = boost::asio::ip;
 
 std::string BlockingTCPClientSend(const std::string& addr, const std::string& port, const std::string& filename)
 {
@@ -33,8 +34,8 @@ std::string BlockingTCPClientSend(const std::string& addr, const std::string& po
 
 		// send
 		boost::asio::io_context io_context;
-		tcp::socket s(io_context);
-		tcp::resolver resolver(io_context);
+		boostip::tcp::socket s(io_context);
+		boostip::tcp::resolver resolver(io_context);
 		boost::asio::connect(s, resolver.resolve(addr, port));
 		n = boost::asio::read_until(s, boost::asio::dynamic_buffer(response_from_server), ';');
 		tmp = response_from_server.substr(0, n);
