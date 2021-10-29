@@ -30,7 +30,7 @@ std::string BlockingTCPClientSend(const std::string& addr, const std::string& po
 		// read file into 'contents' string, append EOF.
 		while (is.read(buf, sizeof(buf)).gcount() > 0)
 			contents.append(buf, is.gcount());
-		contents.push_back((char)0x5);
+		contents.push_back((char)26);
 
 		// send
 		boost::asio::io_context io_context;
