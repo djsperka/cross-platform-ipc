@@ -15,7 +15,7 @@
 #include <boost/asio.hpp>
 namespace boostip = boost::asio::ip;
 
-std::string BlockingTCPClientSendString(const std::string& addr, const std::string& port, std::string& contents)
+std::string BlockingTCPClientSendString(const std::string& addr, const std::string& port, std::string& contents, bool bWaitForReply = false)
 {
 	std::string tmp;
 	size_t n;
@@ -34,17 +34,20 @@ std::string BlockingTCPClientSendString(const std::string& addr, const std::stri
 	contents.push_back((char)26);
 	boost::asio::write(s, boost::asio::buffer(contents.c_str(), contents.size()));
 
-	std::cout << "read reply from server" << std::endl;
+	if (bWaitForReply)
+	{
+		std::cout << "read reply from server" << std::endl;
 
-	n = boost::asio::read_until(s, boost::asio::dynamic_buffer(response_from_server), ';');
-	reply = response_from_server.substr(0, n);
+		n = boost::asio::read_until(s, boost::asio::dynamic_buffer(response_from_server), ';');
+		reply = response_from_server.substr(0, n);
+	}
 
 	s.close();
 
 	return reply;
 }
 
-std::string BlockingTCPClientSend(const std::string& addr, const std::string& port, const std::string& filename)
+std::string BlockingTCPClientSend(const std::string& addr, const std::string& port, const std::string& filename, bool bWaitForReply = false)
 {
 	std::cout << "BlockingTCPClientSend: " << addr << " " << port << " " << filename << std::endl;
 	std::string contents;
@@ -55,7 +58,7 @@ std::string BlockingTCPClientSend(const std::string& addr, const std::string& po
 	while (is.read(buf, sizeof(buf)).gcount() > 0)
 		contents.append(buf, is.gcount());
 
-	return BlockingTCPClientSendString(addr, port, contents);
+	return BlockingTCPClientSendString(addr, port, contents, bWaitForReply);
 }
 
 
